@@ -18,14 +18,7 @@ Route::middleware('guest')->group(function () {
     Route::get('user-register', [RegisteredUserController::class, 'create_candidate'])
     ->name('user-register');
 
-
-    Route::group(['middleware' => 'cors'], function () {
-        // Route::get('public-post-list', [PostController::class, 'postList']);
-        Route::post('register', [RegisteredUserController::class, 'store'])->name('register');
-
-
-    });
-
+    Route::post('register', [RegisteredUserController::class, 'store']);
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
                 ->name('login');
@@ -36,16 +29,6 @@ Route::middleware('guest')->group(function () {
     Route::post('user-login', [AuthenticatedSessionController::class, 'store_candidate']);
 
     Route::post('login', [AuthenticatedSessionController::class, 'store']);
-
-Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
-     ->middleware('auth:sanctum')
-     ->name('logout');
-
-     Route::middleware('auth:sanctum')->get('/test-user', function (Request $request) {
-        return response()->json([
-            'authenticatedUser' => $request->user()
-        ]);
-    });
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
                 ->name('password.request');
@@ -60,8 +43,8 @@ Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
                 ->name('password.store');
 });
 
-// Route::middleware('auth:sanctum')->group(function () {
-        Route::get('verify-email', EmailVerificationPromptController::class)
+Route::middleware('auth')->group(function () {
+    Route::get('verify-email', EmailVerificationPromptController::class)
                 ->name('verification.notice');
 
     Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
@@ -79,4 +62,6 @@ Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
 
     Route::put('password', [PasswordController::class, 'update'])->name('password.update');
 
-// });
+    Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
+                ->name('logout');
+});

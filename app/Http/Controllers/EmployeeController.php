@@ -7,8 +7,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class EmployeeController extends Controller
 {
@@ -17,31 +19,26 @@ class EmployeeController extends Controller
      */
     public function index()
     {
-        $creator = auth()->user();
-        $employees = Employee::where('creator_id', $creator->id)->get();
-        $users = User::all();
-        return view('pages.controlpanel.employee.index', [
-            'employees' => $employees,
-            'users' => $users,
-        ]);
-    }
+        try {
+            $creator = auth()->user();
+            Log::info("Fetching employees for creator ID: {$creator->id}");
 
+            $employees = Employee::where('creator_id', $creator->id)
+                ->with('user')
+                ->get();
 
-    public function indexForAdmin($id)
-    {
+            return response()->json([
+                'success' => true,
+                'data' => $employees
+            ], Response::HTTP_OK);
 
-        $employees = Employee::where('creator_id', $id)->get();
-        $users = User::all();
-        return view('pages.controlpanel.employee.index', [
-            'employees' => $employees,
-            'users' => $users,
-            'creator' => $id,
-        ]);
-    }
-
-    public function create()
-    {
-        return view('pages.controlpanel.employee.create');
+        } catch (\Exception $e) {
+            Log::error("Error fetching employees: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve employees'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**
@@ -49,200 +46,177 @@ class EmployeeController extends Controller
      */
     public function store(Request $request)
     {
-        $creator = auth()->user();
+        Log::info('Employee creation request', $request->all());
 
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:' . User::class],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ])->assignrole('employee');
+        if ($validator->fails()) {
+            Log::warning('Validation failed', $validator->errors()->toArray());
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
+        try {
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+            ])->assignRole('employee');
 
-        $validatedData['creator_id'] = $creator->id;
-        $validatedData['user_id'] = $user->id;
-        // Create the Employee using the validated data
-        Employee::create($validatedData);
+            Employee::create([
+                'creator_id' => auth()->id(),
+                'user_id' => $user->id
+            ]);
 
-        // You can redirect or do something else after the Employee is created
-        return redirect()->route('employee.index')->with('success', 'Employee created successfully.');;
-    }
+            Log::info("Employee created successfully. User ID: {$user->id}");
 
-    public function adminCreate($id)
-    {
+            return response()->json([
+                'success' => true,
+                'message' => 'Employee created successfully.',
+                'data' => $user->load('employees')
+            ], Response::HTTP_CREATED);
 
-        return view('pages.controlpanel.employee.create', ['org_id' => $id]);
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function adminStore(Request $request)
-    {
-
-
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:' . User::class],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-
-        ]);
-
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ])->assignrole('employee');
-
-
-        $validatedData['creator_id'] = $request->creator;
-        $validatedData['user_id'] = $user->id;
-        // Create the Employee using the validated data
-        Employee::create($validatedData);
-
-        if ($request->exists('creator')) {
-            return redirect()->route('org-employees', $request->creator)->with('success', 'Employee created successfully.');;
-        } else {
-            return redirect()->route('employee.index')->with('success', 'Employee created successfully.');;
+        } catch (\Exception $e) {
+            Log::error("Employee creation failed: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create employee'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show($id)
     {
-        $emp = User::join('employees', 'users.id', '=', 'employees.user_id')
-            ->where('users.id', $id)
-            ->select('users.email', 'users.name', 'employees.*')
-            ->first();
+        try {
+            $employee = Employee::with('user')
+                ->where('user_id', $id)
+                ->firstOrFail();
 
-        return view('pages.controlpanel.employee.show', ['emp' => $emp]);
-    }
+            return response()->json([
+                'success' => true,
+                'data' => $employee
+            ], Response::HTTP_OK);
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-
-        $employee = Employee::where('user_id', $id)->firstOrFail();
-        $user = User::findOrFail($id);
-        return view('pages.controlpanel.employee.edit', [
-            'employee' => $employee,
-            'user' => $user,
-        ]);
-    }
-
-    public function adminEdit($emp_id, $id)
-    {
-
-        $employee = Employee::where('user_id', $emp_id)->firstOrFail();
-        $user = User::findOrFail($emp_id);
-        return view('pages.controlpanel.employee.edit', [
-            'employee' => $employee,
-            'user' => $user,
-            'org_id' => $id,
-        ]);
+        } catch (\Exception $e) {
+            Log::error("Employee not found: {$id} - " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found'
+            ], Response::HTTP_NOT_FOUND);
+        }
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, $id)
     {
+        Log::info("Updating employee ID: {$id}", $request->all());
 
+        try {
+            $user = User::findOrFail($id);
+            $employee = Employee::where('user_id', $id)->firstOrFail();
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255'],
-
-        ]);
-
-        $user = User::findOrFail($id);
-
-        // Update the user's attributes
-        $user->name = $request->name;
-        $user->email = $request->email;
-
-        // Optionally, you can update the password if needed
-        if (!empty($request->password)) {
-            $request->validate([
-                'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            $validator = Validator::make($request->all(), [
+                'name' => ['sometimes', 'string', 'max:255'],
+                'email' => ['sometimes', 'string', 'email', 'max:255', 'unique:users,email,'.$id],
+                'password' => ['sometimes', 'confirmed', Rules\Password::defaults()],
+                'phone_number' => ['nullable', 'string', 'max:255'],
+                'gender' => ['nullable', 'in:Male,Female,Other'],
+                'birth_date' => ['nullable', 'date'],
+                'address' => ['nullable', 'string', 'max:255'],
             ]);
 
-            $user->password = Hash::make($request->password);
-        }
+            if ($validator->fails()) {
+                Log::warning('Update validation failed', $validator->errors()->toArray());
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
 
-        $user->save();
+            $user->update($request->only(['name', 'email']));
 
+            if ($request->has('password')) {
+                $user->password = Hash::make($request->password);
+                $user->save();
+            }
 
-        $rules = [
-            'picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'resume' => 'nullable|mimes:pdf|max:2048',
-            'phone_number' => 'nullable|string|max:255',
-            'gender' => 'nullable|in:Male,Female,Other',
-            'birth_date' => 'nullable|date',
-            'address' => 'nullable|string|max:255',
-            'zipcode' => 'nullable|string|max:10',
-            'latest_degree' => 'nullable|string|max:255',
-            'latest_university' => 'nullable|string|max:255',
-            'current_organization' => 'nullable|string|max:255',
-            'current_department' => 'nullable|string|max:255',
-            'current_position' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:500',
-        ];
+            $employee->update($request->except(['name', 'email', 'password']));
 
+            Log::info("Employee updated successfully. User ID: {$id}");
+            return response()->json([
+                'success' => true,
+                'message' => 'Employee updated successfully.',
+                'data' => $user->load('employee')
+            ], Response::HTTP_OK);
 
-        // Validate the request data
-        $employee = Employee::where('user_id', $id)->firstOrFail(); // Replace $employeeId with the Employee's ID
-
-        // Validate the request data
-        $validatedData = $request->validate($rules);
-
-        // Update the Employee record using the validated data
-        $employee->update($validatedData);
-
-        // Redirect or perform other actions after the Employee is updated
-
-        if ($request->exists('creator')) {
-            return redirect()->route('org-employees', $request->creator)->with('success', 'Employee updated successfully.');;
-        } else {
-            return redirect()->route('employee.index')->with('success', 'Employee updated successfully.');;
+        } catch (\Exception $e) {
+            Log::error("Update failed for ID {$id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update employee'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy($id)
     {
-        // Retrieve the Employee based on the provided $id
-        $user = User::findOrFail($id);
-        Employee::where('user_id', $id)->delete();
-        // Delete the Employee
-        $user->deleteWithRolesAndPermissions();
+        try {
+            $user = User::findOrFail($id);
+            Employee::where('user_id', $id)->delete();
+            $user->deleteWithRolesAndPermissions();
 
-        // You can redirect or do something else after the Employee is deleted
-        return redirect()->route('employee.index')->with('success', 'Employee deleted successfully.');;
+            Log::info("Employee deleted successfully. User ID: {$id}");
+            return response()->json([
+                'success' => true,
+                'message' => 'Employee deleted successfully.'
+            ], Response::HTTP_OK);
+
+        } catch (\Exception $e) {
+            Log::error("Delete failed for ID {$id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete employee'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
-
-    public function adminDestroy($emp_id, $id)
+    /**
+     * Admin-specific endpoints
+     */
+    public function adminIndex($creatorId)
     {
+        try {
+            Log::info("Admin fetching employees for creator ID: {$creatorId}");
 
-        $user = User::findOrFail($emp_id);
-        Employee::where('user_id', $emp_id)->delete();
-        // Delete the Employee
-        $user->deleteWithRolesAndPermissions();
+            $employees = Employee::where('creator_id', $creatorId)
+                ->with('user')
+                ->get();
 
-        // You can redirect or do something else after the Employee is deleted
-        return redirect()->route('org-employees', $id)->with('success', 'Employee deleted successfully.');;
+            return response()->json([
+                'success' => true,
+                'data' => $employees
+            ], Response::HTTP_OK);
+
+        } catch (\Exception $e) {
+            Log::error("Admin employee fetch failed: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve employees'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }

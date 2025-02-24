@@ -8,27 +8,39 @@ use Illuminate\Http\Request;
 use App\Jobs\PdfLabeler;
 use App\Models\Candidate;
 use Illuminate\Support\Facades\Validator;
-
+use Illuminate\Support\Facades\Log;
 
 class JobFrontController extends Controller
 {
 
- public function FrontJobList(Request $request){
+    public function FrontJobList(Request $request)
+    {
+        // Log a simple message
+        Log::info('Fetching jobs');
+
+        // Query the jobs and join with organizations
+        // $jobs = Job::join('organizations', 'jobs.organization_id', '=', 'organizations.user_id')
+        //     ->select('jobs.*', 'organizations.organization_name', 'organizations.website')
+        //     ->get();
+
+            $jobs = Job::leftJoin('organizations', 'jobs.organization_id', '=', 'organizations.user_id')
+    ->select('jobs.*', 'organizations.organization_name', 'organizations.website')
+    ->get();
 
 
-  $jobs = Job::join('organizations', 'jobs.organization_id', '=', 'organizations.user_id')
-  ->select('jobs.*','organizations.organization_name', 'organizations.website')
-  ->whereRaw('jobs.organization_id = organizations.user_id')
-  ->get();
+        // Log the jobs array as context
+        Log::info('Jobs before checking API URL', ['jobs' => $jobs]);
 
-  
-  if (strpos($request->url(), '/api/') !== false) {
+        // If the request URL contains '/api/', return JSON
+        if (strpos($request->url(), '/api/') !== false) {
+            Log::info('Returning JSON for API URL', ['jobs' => $jobs]);
+            return response()->json(['jobs' => $jobs]);
+        }
 
-    return response()->json(['jobs' => $jobs]);
-}
+        // Otherwise, return the Blade view
+        return view('pages.guest.jobs_list', ['jobs' => $jobs]);
+    }
 
-   return view('pages.guest.jobs_list', ['jobs' => $jobs]);
- }  
 
  public function apply(Request $request,$id){
 
@@ -77,7 +89,7 @@ class JobFrontController extends Controller
       $destinationFileName = time() . '_' . $cvFile->getClientOriginalName();
       $cvFile->move($destinationPath, $destinationFileName);
       $pathname = $destinationPath. DIRECTORY_SEPARATOR .$destinationFileName;
-      
+
       PdfLabeler::dispatch($pathname, Auth()->user());
       Candidate::where('user_id', Auth()->user()->id)
       ->update([
@@ -118,7 +130,7 @@ $validator = Validator::make($request->all(), [
     if ($validator->fails()) {
         return response()->json(['error' => $validator->errors()], 422);
     }
-  
+
        $existingApplication = Application_form::where('job_id', $id)
        ->where('email', $request->input('email'))
        ->first();
@@ -130,8 +142,8 @@ $validator = Validator::make($request->all(), [
         }
         return redirect()->back()->with('error', $errorMessage);
     }
-    
-   
+
+
     if (!$request->input('use_old_cv')) {
 
 
@@ -142,16 +154,16 @@ $validator = Validator::make($request->all(), [
     //   if ($previousCvPath && file_exists($previousCvPath)) {
     //       unlink($previousCvPath);
     //   }
-  
+
     //   // Delete the previous record from the database
     //   Candidate::where(/* Add your condition to identify the record */)->delete();
-  
+
       $cvFile = $request->file('cv');
       $destinationPath = public_path('cv');
       $destinationFileName = time() . '_' . $cvFile->getClientOriginalName();
       $cvFile->move($destinationPath, $destinationFileName);
       $pathname = $destinationPath . DIRECTORY_SEPARATOR . $destinationFileName;
-      
+
       PdfLabeler::dispatch($pathname);
       Candidate::create([
         'cv' => $pathname,
@@ -160,7 +172,7 @@ $validator = Validator::make($request->all(), [
     }else{
       $pathname = $request->input('use_old_cv');
     }
-  
+
     Application_form::create([
         'job_id' => $id,
         'name' => $request->input('name'),
@@ -177,7 +189,7 @@ $validator = Validator::make($request->all(), [
        return strpos($request->url(), '/api/') !== false
            ? response()->json(['success' => $responseMessage])
            : redirect()->route('frontjoblist')->with('success', $responseMessage);
-       
+
  }
 
  public function view_applied(){
@@ -185,7 +197,7 @@ $validator = Validator::make($request->all(), [
 
     $user = auth()->user();
     $id = $user->application_form->pluck('job_id')->all();
-    
+
     $applied_jobs = Job::whereIn('jobs.id', $id)
     ->join('application_form', 'jobs.id', '=', 'application_form.job_id')
     ->select('jobs.*', 'application_form.id as form_id', 'application_form.status')

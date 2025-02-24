@@ -107,7 +107,7 @@
                                 autofocus
                                 autocomplete="username"
                                 />
-                                <x-input-error :messages="$errors->get('email')" class="mt-2" />
+
                             </div>
                             <div class="mb-3 form-password-toggle">
                                 <div class="d-flex justify-content-between">
@@ -128,8 +128,7 @@
                                     aria-describedby="password"
                                     required autocomplete="current-password"
                                 />
-                                  <x-input-error :messages="$errors->get('password')" class="mt-2" />
-                                <span class="input-group-text cursor-pointer"><i class="bx bx-hide"></i></span>
+                               <span class="input-group-text cursor-pointer"><i class="bx bx-hide"></i></span>
                                 </div>
                             </div>
                             <div class="mb-3">
