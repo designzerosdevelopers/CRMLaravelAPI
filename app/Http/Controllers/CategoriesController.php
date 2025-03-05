@@ -12,34 +12,42 @@ class CategoriesController extends Controller
      */
     public function index()
     {
-
         $cats = Categories::all();
 
-        return view('pages.controlpanel.categories.index', ['cats' => $cats]);
+        return response()->json([
+            'success' => true,
+            'data'    => $cats,
+        ], 200);
     }
 
     /**
      * Show the form for creating a new resource.
+     * (In an API, this can return instructions or simply be omitted.)
      */
     public function create()
     {
-        return view('pages.controlpanel.categories.create');
+        return response()->json([
+            'success' => true,
+            'message' => 'Send a POST request with "cat_name" to create a new category.'
+        ], 200);
     }
+
     /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'cat_name' => ['required', 'max:255'],
-
         ]);
 
-        Categories::create([
-            'cat_name' => $request->cat_name,
-        ]);
+        $category = Categories::create($validated);
 
-        return redirect()->route('categories.index')->with('success', 'Category created successfully.');;
+        return response()->json([
+            'success' => true,
+            'message' => 'Category created successfully.',
+            'data'    => $category
+        ], 201);
     }
 
     /**
@@ -47,17 +55,40 @@ class CategoriesController extends Controller
      */
     public function show(string $id)
     {
-        //
+        $category = Categories::find($id);
+
+        if (!$category) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Category not found'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $category
+        ], 200);
     }
 
     /**
      * Show the form for editing the specified resource.
+     * (In an API, this typically returns the resource data to edit.)
      */
     public function edit(string $id)
     {
-        $cat = Categories::where('id', $id)->first();
+        $category = Categories::find($id);
 
-        return view('pages.controlpanel.categories.edit', ['cat' => $cat]);
+        if (!$category) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Category not found'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $category
+        ], 200);
     }
 
     /**
@@ -65,16 +96,26 @@ class CategoriesController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $request->validate([
+        $validated = $request->validate([
             'cat_name' => ['required', 'max:255'],
-
         ]);
 
-        Categories::find($id)->update([
-            'cat_name' => $request->cat_name,
-        ]);
+        $category = Categories::find($id);
 
-        return redirect()->route('categories.index')->with('success', 'Category updated successfully.');;
+        if (!$category) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Category not found'
+            ], 404);
+        }
+
+        $category->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Category updated successfully.',
+            'data'    => $category
+        ], 200);
     }
 
     /**
@@ -82,8 +123,20 @@ class CategoriesController extends Controller
      */
     public function destroy(string $id)
     {
-        Categories::find($id)->delete();
+        $category = Categories::find($id);
 
-        return redirect()->route('categories.index')->with('success', 'Category deleted successfully.');;
+        if (!$category) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Category not found'
+            ], 404);
+        }
+
+        $category->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Category deleted successfully.'
+        ], 200);
     }
 }

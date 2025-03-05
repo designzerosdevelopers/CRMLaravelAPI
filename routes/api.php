@@ -41,6 +41,7 @@ Route::middleware(['api'])->group(function () {
             Route::post('/invitation-registred', [InviteController::class, 'store_invitation'])->name('store_invitation');
             //permission Contoller Routes
             Route::resource('employee', EmployeeController::class);
+            Route::put('/employee/update/{id}', [EmployeeController::class, 'update']);
             Route::get('user-select', [PermissionController::class, 'userSelect'])->name('user-select');
             Route::get('role-select', [PermissionController::class, 'roleSelect'])->name('role-select');
             Route::any('user-permission', [PermissionController::class, 'userPermission'])->name('user-permission');

@@ -14,7 +14,9 @@ use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
-
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class InviteController extends Controller
 {
@@ -41,7 +43,7 @@ class InviteController extends Controller
     public function store(Request $request)
     {
         $token = Str::random(40);
-
+try{
         Invitation::create([
             'creator_id' => Auth()->user()->id,
             'email' => $request->email,
@@ -50,8 +52,19 @@ class InviteController extends Controller
 
         Mail::to($request->email)->send(new TheMail($token));
 
-        return redirect()->back()->with('success', 'Invitation email sent successfully.');
+        return response()->json([
+            'success' => true,
+            'message' => 'Email sent successfully.',
+            'data'=> $request->email
+        ], Response::HTTP_CREATED);
+    } catch (\Exception $e) {
+        Log::error("Email sending failed: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to send email '
+        ], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
+}
 
     /**
      * Display the specified resource.

@@ -11,6 +11,7 @@ use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\Storage;
 
 class EmployeeController extends Controller
 {
@@ -31,7 +32,6 @@ class EmployeeController extends Controller
                 'success' => true,
                 'data' => $employees
             ], Response::HTTP_OK);
-
         } catch (\Exception $e) {
             Log::error("Error fetching employees: " . $e->getMessage());
             return response()->json([
@@ -81,7 +81,6 @@ class EmployeeController extends Controller
                 'message' => 'Employee created successfully.',
                 'data' => $user->load('employees')
             ], Response::HTTP_CREATED);
-
         } catch (\Exception $e) {
             Log::error("Employee creation failed: " . $e->getMessage());
             return response()->json([
@@ -105,7 +104,6 @@ class EmployeeController extends Controller
                 'success' => true,
                 'data' => $employee
             ], Response::HTTP_OK);
-
         } catch (\Exception $e) {
             Log::error("Employee not found: {$id} - " . $e->getMessage());
             return response()->json([
@@ -120,20 +118,34 @@ class EmployeeController extends Controller
      */
     public function update(Request $request, $id)
     {
-        Log::info("Updating employee ID: {$id}", $request->all());
+        Log::info("Update method called with ID: {$id}");
+        Log::info('User details', $request->all());
+        Log::info('Name: ' . $request->input('name'));
+        Log::info('Email: ' . $request->input('email'));
+
 
         try {
             $user = User::findOrFail($id);
+            Log::info("User found with ID: {$id}");
+
             $employee = Employee::where('user_id', $id)->firstOrFail();
+            Log::info("Employee found for user ID: {$id}");
 
             $validator = Validator::make($request->all(), [
                 'name' => ['sometimes', 'string', 'max:255'],
-                'email' => ['sometimes', 'string', 'email', 'max:255', 'unique:users,email,'.$id],
+                'email' => ['sometimes', 'string', 'email', 'max:255', 'unique:users,email,' . $id],
                 'password' => ['sometimes', 'confirmed', Rules\Password::defaults()],
                 'phone_number' => ['nullable', 'string', 'max:255'],
                 'gender' => ['nullable', 'in:Male,Female,Other'],
                 'birth_date' => ['nullable', 'date'],
                 'address' => ['nullable', 'string', 'max:255'],
+                'zipcode' => ['nullable', 'string', 'max:10'],
+                'latest_degree' => ['nullable', 'string', 'max:255'],
+                'latest_university' => ['nullable', 'string', 'max:255'],
+                'current_organization' => ['nullable', 'string', 'max:255'],
+                'current_department' => ['nullable', 'string', 'max:255'],
+                'current_position' => ['nullable', 'string', 'max:255'],
+                'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:2048'],
             ]);
 
             if ($validator->fails()) {
@@ -144,22 +156,35 @@ class EmployeeController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            $user->update($request->only(['name', 'email']));
+            $user->update($request->only([
+                'name',
+                'email'
+            ]));
+            Log::info("User updated: {$id}");
 
             if ($request->has('password')) {
                 $user->password = Hash::make($request->password);
                 $user->save();
+                Log::info("Password updated for user ID: {$id}");
             }
 
             $employee->update($request->except(['name', 'email', 'password']));
 
+
+            if ($request->hasFile('avatar')) {
+                $avatarPath = $request->file('avatar')->store('avatars', 'public');
+                $employee->picture = $avatarPath;
+                $employee->save();
+                Log::info("Avatar updated for user ID: {$id}");
+            }
+
             Log::info("Employee updated successfully. User ID: {$id}");
+
             return response()->json([
                 'success' => true,
                 'message' => 'Employee updated successfully.',
-                'data' => $user->load('employee')
+                'data' => $user->load('employees')
             ], Response::HTTP_OK);
-
         } catch (\Exception $e) {
             Log::error("Update failed for ID {$id}: " . $e->getMessage());
             return response()->json([
@@ -169,9 +194,11 @@ class EmployeeController extends Controller
         }
     }
 
+
     /**
      * Remove the specified resource from storage.
      */
+
     public function destroy($id)
     {
         try {
@@ -184,7 +211,6 @@ class EmployeeController extends Controller
                 'success' => true,
                 'message' => 'Employee deleted successfully.'
             ], Response::HTTP_OK);
-
         } catch (\Exception $e) {
             Log::error("Delete failed for ID {$id}: " . $e->getMessage());
             return response()->json([
@@ -210,7 +236,6 @@ class EmployeeController extends Controller
                 'success' => true,
                 'data' => $employees
             ], Response::HTTP_OK);
-
         } catch (\Exception $e) {
             Log::error("Admin employee fetch failed: " . $e->getMessage());
             return response()->json([
