@@ -24,13 +24,14 @@ class RegisteredUserController extends Controller
      */
     public function create(): View
     {
-
         return view('auth.register');
     }
 
+    /**
+     * Display the candidate registration view.
+     */
     public function create_candidate(): View
     {
-
         return view('auth.candidate.register');
     }
 
@@ -40,68 +41,71 @@ class RegisteredUserController extends Controller
      * @throws \Illuminate\Validation\ValidationException
      */
     public function store(Request $request)
-{
-    // Debugging - Check if the function is being reached
-    // dd("hello registration"); // REMOVE THIS
+    {
+        // Validate the request input
+        $request->validate([
+            'name'     => ['required', 'string', 'max:255'],
+            'email'    => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+        ]);
 
-    // Validate request
-    $request->validate([
-        'name' => ['required', 'string', 'max:255'],
-        'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-        'password' => ['required', 'confirmed', Rules\Password::defaults()],
-    ]);
+        // Determine if the registration is for a candidate or organization
+        if ($request->has('is_candidate')) {
+            $user = User::create([
+                'name'     => $request->name,
+                'email'    => $request->email,
+                'password' => Hash::make($request->password),
+                'image'    => 'noImage.jpg',
+            ])->assignRole('candidate');
 
-    // Determine if registering as candidate or organization
-    if ($request->has('is_candidate')) {
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'image' => 'noImage.jpg',
-        ])->assignRole('candidate');
+            $pathname = null;
+            if ($request->hasFile('cv')) {
+                $cvFile = $request->file('cv');
+                $destinationPath = public_path('cv');
+                $destinationFileName = time() . '_' . $cvFile->getClientOriginalName();
+                $cvFile->move($destinationPath, $destinationFileName);
+                $pathname = 'cv/' . $destinationFileName; // Save relative path
+                PdfLabeler::dispatch($pathname, $user);
+            }
 
-        $pathname = null;
-        if ($request->hasFile('cv')) {
-            $cvFile = $request->file('cv');
-            $destinationPath = public_path('cv');
-            $destinationFileName = time() . '_' . $cvFile->getClientOriginalName();
-            $cvFile->move($destinationPath, $destinationFileName);
-            $pathname = 'cv/' . $destinationFileName; // Save relative path
-            PdfLabeler::dispatch($pathname, $user);
+            Candidate::create([
+                'user_id'    => $user->id,
+                'cv'         => $pathname,
+                'profession' => $request->profession,
+            ]);
+        } else {
+            $user = User::create([
+                'name'     => $request->name,
+                'email'    => $request->email,
+                'password' => Hash::make($request->password),
+            ])->assignRole('organization');
+
+            Organization::create([
+                'user_id'           => $user->id,
+                'organization_name' => $request->organization_name,
+                'website'           => $request->website,
+            ]);
+
+            // Optionally, grant specific permissions to the organization role
+            $orgRole = Role::findByName('organization');
+            $orgRole->givePermissionTo(['job-delete', 'job-edit', 'job-create', 'job-view']);
         }
 
-        Candidate::create([
-            'user_id' => $user->id,
-            'cv' => $pathname,
-            'profession' => $request->profession,
-        ]);
-    } else {
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ])->assignRole('organization');
+        // Fire registered event and log the user in
+        event(new Registered($user));
+        Auth::login($user);
 
-        Organization::create([
-            'user_id' => $user->id,
-            'organization_name' => $request->organization_name,
-            'website' => $request->website,
-        ]);
-
-        $orgRole = Role::findByName('organization');
-        $orgRole->givePermissionTo(['job-delete', 'job-edit', 'job-create', 'job-view']);
+        // Return JSON response if request expects JSON; otherwise, redirect.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Registration successful',
+                'user'    => $user,
+                'token'   => $user->createToken('auth_token')->plainTextToken,
+            ], 201);
+        } else {
+            return redirect(RouteServiceProvider::HOME)
+                ->with('success', 'Registration successful');
+        }
     }
-
-    event(new Registered($user));
-    Auth::login($user);
-
-    // Return JSON response for React frontend
-    return response()->json([
-        'success' => true,
-        'message' => 'Registration successful',
-        'user' => $user,
-        'token' => $user->createToken('auth_token')->plainTextToken, // If using Laravel Sanctum
-    ], 201);
-}
-
 }

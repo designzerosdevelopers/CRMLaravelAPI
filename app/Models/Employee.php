@@ -26,15 +26,20 @@ class Employee extends Model
         'current_position',
         'description',
     ];
- 
+
+    // public function user()
+    // {
+    //     return $this->belongsTo(User::class, 'user_id');
+    // }
+
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
     }
 
     public function job()
     {
         return $this->hasMany(Job::class, 'user_id');
     }
-    
+
 }

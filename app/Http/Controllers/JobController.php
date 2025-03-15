@@ -8,6 +8,8 @@ use App\Models\Employee;
 use App\Models\Categories;
 use App\Models\Organization;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response;
 
 class JobController extends Controller
 {
@@ -16,7 +18,6 @@ class JobController extends Controller
      */
     public function index(Request $request)
     {
-
         if ($request->user()->hasRole('employee')) {
             $org = Employee::where('user_id', auth()->user()->id)->first();
             $jobs = Job::where('organization_id', $org->creator_id)
@@ -27,219 +28,305 @@ class JobController extends Controller
             $jobs = Job::where('organization_id', $org->user_id)
                 ->withCount('application_form')
                 ->get();
+        } else {
+            $jobs = collect(); // Fallback if no role match
         }
-        if (strpos($request->url(), '/api/') !== false) {
 
-            return response()->json(['Responce' => $jobs]);
+        if ($request->expectsJson()) {
+            return response()->json(['response' => $jobs], Response::HTTP_OK);
         }
         return view('pages.controlpanel.job.index', ['jobs' => $jobs]);
     }
 
-    public function indexForAdmin($id)
+    /**
+     * Get data (categories and degrees).
+     */
+    public function getdata(Request $request)
+    {
+        try {
+            $categories = Categories::all();
+            $degrees = Degree::all();
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success'    => true,
+                    'message'    => 'Data fetched successfully.',
+                    'categories' => $categories,
+                    'degrees'    => $degrees
+                ], Response::HTTP_OK);
+            }
+            return view('pages.controlpanel.job.data', compact('categories', 'degrees'));
+        } catch (\Exception $e) {
+            Log::error("Data fetching failed: " . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch data'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors(['message' => 'Failed to fetch data']);
+        }
+    }
+
+    /**
+     * Display jobs for an admin view.
+     */
+    public function indexForAdmin(Request $request, $id)
     {
         $org = Organization::where('user_id', $id)->first();
         $jobs = Job::where('organization_id', $org->user_id)
             ->withCount('application_form')
             ->get();
 
-
-
+        if ($request->expectsJson()) {
+            return response()->json(['response' => $jobs, 'creator' => $id], Response::HTTP_OK);
+        }
         return view('pages.controlpanel.job.index', ['jobs' => $jobs, 'creator' => $id]);
     }
+
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function create(Request $request)
     {
-
         $this->hasPermission('job-create');
         $categories = Categories::all();
         $degrees = Degree::all();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message'    => 'Provide job creation data',
+                'categories' => $categories,
+                'degrees'    => $degrees,
+            ], Response::HTTP_OK);
+        }
         return view('pages.controlpanel.job.create', ['categories' => $categories, 'degrees' => $degrees]);
     }
 
-    public function adminCreate($id)
+    /**
+     * Show the form for creating a new resource for admin.
+     */
+    public function adminCreate(Request $request, $id)
     {
-
         $categories = Categories::all();
         $degrees = Degree::all();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message'    => 'Provide job creation data for admin',
+                'categories' => $categories,
+                'degrees'    => $degrees,
+                'org_id'     => $id,
+            ], Response::HTTP_OK);
+        }
         return view('pages.controlpanel.job.create', ['categories' => $categories, 'degrees' => $degrees, 'org_id' => $id]);
     }
+
+    /**
+     * Store a newly created resource for admin.
+     */
     public function adminStore(Request $request)
     {
-
-
         $rules = [
-            'job_title' => 'nullable|string|max:255',
-            'category_id' => 'required',
-            'degree_id' => 'required',
-            'description' => 'nullable|string',
-            'address' => 'nullable|string|max:255',
-            'zipcode' => 'nullable|string|max:20',
-            'status' => 'in:Active,Inactive',
-            'is_remote' => 'required',
-            'skill' => 'nullable|string',
-            'experience' => 'nullable|string',
-            'budget' => 'nullable|string',
-            'bid_close' => 'nullable|date',
-            'deadline' => 'nullable|date',
-            'career_page_url' => 'nullable|url',
+            'job_title'                => 'nullable|string|max:255',
+            'category_id'              => 'required',
+            'degree_id'                => 'required',
+            'description'              => 'nullable|string',
+            'address'                  => 'nullable|string|max:255',
+            'zipcode'                  => 'nullable|string|max:20',
+            'status'                   => 'in:Active,Inactive',
+            'is_remote'                => 'required',
+            'skill'                    => 'nullable|string',
+            'experience'               => 'nullable|string',
+            'budget'                   => 'nullable|string',
+            'bid_close'                => 'nullable|date',
+            'deadline'                 => 'nullable|date',
+            'career_page_url'          => 'nullable|url',
             'is_pinned_in_career_page' => 'nullable|boolean',
         ];
 
-
-        // Validate the request data
         $validatedData = $request->validate($rules);
         $validatedData['organization_id'] = $request->creator;
         $validatedData['user_id'] = $request->creator;
 
-        // Create the job using the validated data
         Job::create($validatedData);
 
-        $categories = Categories::all();
-
+        if ($request->expectsJson()) {
+             return response()->json([
+                'success' => true,
+                'message' => 'Job created successfully.'
+            ], Response::HTTP_CREATED);
+        }
         return redirect()->route('org-jobs', ['id' => $request->creator])
-            ->with('success', 'Job Created successfully.');
-    }
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-
-        if ($request->user()->hasRole('employee')) {
-            $org = Employee::where('user_id', auth()->user()->id)->first();
-            $creator =  $org->creator_id;
-        } elseif ($request->user()->hasRole('organization')) {
-            $org = Organization::where('user_id', auth()->user()->id)->first();
-            $creator =  $org->user_id;
-        }
-
-
-        $rules = [
-            'job_title' => 'nullable|string|max:255',
-            'category_id' => 'nullable',
-            'degree_id' => 'nullable',
-            'description' => 'nullable|string',
-            'address' => 'nullable|string|max:255',
-            'zipcode' => 'nullable|string|max:20',
-            'status' => 'in:Active,Inactive',
-            'is_remote' => 'nullable',
-            'skill' => 'nullable|string',
-            'experience' => 'nullable|string',
-            'budget' => 'nullable|string',
-            'bid_close' => 'nullable|date',
-            'deadline' => 'nullable|date',
-            'career_page_url' => 'nullable|url',
-            'is_pinned_in_career_page' => 'nullable|boolean',
-        ];
-
-
-        // Validate the request data
-        $validatedData = $request->validate($rules);
-        $validatedData['organization_id'] = $creator;
-        $validatedData['user_id'] = auth()->user()->id;
-
-        // Create the job using the validated data
-        Job::create($validatedData);
-
-        $categories = Categories::all();
-
-        if (strpos($request->url(), '/api/') !== false) {
-
-            return response()->json(['Responce' => 'Job created successfully']);
-        }
-
-        return redirect()->route('job.index', ['categories' => $categories])
             ->with('success', 'Job created successfully.');
     }
 
+    /**
+     * Store a newly created resource.
+     */
+    public function store(Request $request)
+    {
+        if ($request->user_role == 'employee') {
+            $org = Employee::where('user_id', $request->user['id'])->first();
+            $creator = $org->creator_id;
+        } elseif ($request->user_role == 'organization') {
+            $org = Organization::where('user_id', $request->user['id'])->first();
+            $creator = $org->user_id;
+        } else {
+            $creator = null;
+        }
 
+        $rules = [
+            'job_title'                => 'nullable|string|max:255',
+            'category_id'              => 'nullable',
+            'degree_id'                => 'nullable',
+            'description'              => 'nullable|string',
+            'address'                  => 'nullable|string|max:255',
+            'zipcode'                  => 'nullable|string|max:20',
+            'status'                   => 'in:Active,Inactive',
+            'is_remote'                => 'nullable',
+            'skill'                    => 'nullable|string',
+            'experience'               => 'nullable|string',
+            'budget'                   => 'nullable|string',
+            'bid_close'                => 'nullable|date',
+            'deadline'                 => 'nullable|date',
+            'career_page_url'          => 'nullable|url',
+            'is_pinned_in_career_page' => 'nullable|boolean',
+        ];
+
+        $validatedData = $request->validate($rules);
+        $validatedData['organization_id'] = $creator;
+        $validatedData['user_id'] = $request->user['id'];
+
+        Job::create($validatedData);
+
+        if ($request->expectsJson()) {
+            return response()->json(['response' => 'Job created successfully'], Response::HTTP_CREATED);
+        }
+        return redirect()->route('job.index')
+            ->with('success', 'Job created successfully.');
+    }
+
+    /**
+     * Display the specified resource.
+     */
     public function show(Request $request, string $id)
     {
-
         $this->hasPermission('job-view');
         $job = Job::where('jobs.id', $id)->first();
         $degrees = Degree::all();
-        if (strpos($request->url(), '/api/') !== false) {
 
-            return response()->json(['job' => $job]);
+        if ($request->expectsJson()) {
+            return response()->json(['job' => $job], Response::HTTP_OK);
         }
         return view('pages.controlpanel.job.show', ['job' => $job, 'degrees' => $degrees]);
     }
 
-    public function edit(string $id)
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Request $request, string $id)
     {
-
         $this->hasPermission('job-edit');
         $job = Job::find($id);
         $category = Categories::where('id', $job->category_id)->first();
         $categories = Categories::where('id', '!=', $job->category_id)->get();
         $degree = Degree::where('id', $job->degree_id)->first();
         $degrees = Degree::where('id', '!=', $job->degree_id)->get();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'job'        => $job,
+                'cat'        => $category,
+                'categories' => $categories,
+                'degree'     => $degree,
+                'degrees'    => $degrees
+            ], Response::HTTP_OK);
+        }
         return view('pages.controlpanel.job.edit', [
-            'job' => $job,
-            'cat' => $category,
+            'job'        => $job,
+            'cat'        => $category,
             'categories' => $categories,
-            'degree' => $degree,
-            'degrees' => $degrees
+            'degree'     => $degree,
+            'degrees'    => $degrees
         ]);
     }
 
-    public function adminEdit($job_id, $id)
+    /**
+     * Show the form for editing the specified resource for admin.
+     */
+    public function adminEdit(Request $request, $job_id, $id)
     {
-
         $job = Job::find($job_id);
         $category = Categories::where('id', $job->category_id)->first();
         $categories = Categories::where('id', '!=', $job->category_id)->get();
         $degree = Degree::where('id', $job->degree_id)->first();
         $degrees = Degree::where('id', '!=', $job->degree_id)->get();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'job'        => $job,
+                'category'   => $category,
+                'categories' => $categories,
+                'degree'     => $degree,
+                'degrees'    => $degrees,
+                'org_id'     => $id
+            ], Response::HTTP_OK);
+        }
         return view('pages.controlpanel.job.edit', [
-            'job' => $job,
-            'cat' => $category,
+            'job'        => $job,
+            'cat'        => $category,
             'categories' => $categories,
-            'degree' => $degree,
-            'degrees' => $degrees,
-            'org_id' => $id
+            'degree'     => $degree,
+            'degrees'    => $degrees,
+            'org_id'     => $id
         ]);
     }
 
+    /**
+     * Update the specified resource in storage.
+     */
     public function update(Request $request, string $id)
     {
-
-
         $rules = [
-            'job_title' => 'nullable|string|max:255',
-            'category_id' => 'nullable',
-            'degree_id' => 'nullable',
-            'description' => 'nullable|string',
-            'address' => 'nullable|string|max:255',
-            'zipcode' => 'nullable|string|max:20',
-            'status' => 'in:Active,Inactive',
-            'is_remote' => 'nullable',
-            'skill' => 'nullable|string',
-            'experience' => 'nullable|string',
-            'degree_id' => 'nullable',
-            'budget' => 'nullable|string',
-            'bid_close' => 'nullable|date',
-            'deadline' => 'nullable|date',
-            'career_page_url' => 'nullable|url',
+            'job_title'                => 'nullable|string|max:255',
+            'category_id'              => 'nullable',
+            'degree_id'                => 'nullable',
+            'description'              => 'nullable|string',
+            'address'                  => 'nullable|string|max:255',
+            'zipcode'                  => 'nullable',
+            'status'                   => 'in:Active,Inactive',
+            'is_remote'                => 'nullable',
+            'skill'                    => 'nullable|string',
+            'experience'               => 'nullable|string',
+            'budget'                   => 'nullable|string',
+            'bid_close'                => 'nullable|date',
+            'deadline'                 => 'nullable|date',
+            'career_page_url'          => 'nullable|url',
             'is_pinned_in_career_page' => 'nullable|boolean',
         ];
 
-        $validatedData = $request->validate($rules);
+        try {
+            $validatedData = $request->validate($rules);
+            Job::findOrFail($id)->update($validatedData);
 
-        Job::findOrFail($id)->update($validatedData);
-
-        if (strpos($request->url(), '/api/') !== false) {
-
-            return response()->json(['Responce' => 'Job updated successfully']);
-        }
-
-        if ($request->exists('creator')) {
-            return redirect()->route('org-jobs', $request->creator)->with('success', 'Job updated successfully.');
-        } else {
-            return redirect()->route('job.index')->with('success', 'Job updated successfully.');
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Job updated successfully.'
+                ], Response::HTTP_OK);
+            }
+            return redirect()->route('job.index')
+                ->with('success', 'Job updated successfully.');
+        } catch (\Exception $e) {
+            Log::error("Updating job failed: " . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update job'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors(['message' => 'Failed to update job']);
         }
     }
 
@@ -248,27 +335,33 @@ class JobController extends Controller
      */
     public function destroy(Request $request, string $id)
     {
-
         $this->hasPermission('job-delete');
         $job = Job::findOrFail($id);
         $job->delete();
 
-        if (strpos($request->url(), '/api/') !== false) {
-
-            return response()->json(['Responce' => 'Job deleted successfully']);
+        if ($request->expectsJson()) {
+            return response()->json(['response' => 'Job deleted successfully'], Response::HTTP_OK);
         }
         return redirect()->route('job.index')->with('success', 'Job deleted successfully.');
     }
 
-    public function adminDestroy($job_id, $id)
+    /**
+     * Remove the specified resource from storage for admin.
+     */
+    public function adminDestroy(Request $request, $job_id, $id)
     {
-
         $job = Job::findOrFail($job_id);
         $job->delete();
 
-        return redirect()->route('org-jobs', $id)->with('error', 'Job deleted successfully.');
+        if ($request->expectsJson()) {
+            return response()->json(['response' => 'Job deleted successfully'], Response::HTTP_OK);
+        }
+        return redirect()->route('org-jobs', $id)->with('success', 'Job deleted successfully.');
     }
 
+    /**
+     * Check if the current user has the given permission.
+     */
     private function hasPermission($permissionName)
     {
         if (!auth()->user()->hasPermissionTo($permissionName)) {

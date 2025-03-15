@@ -10,8 +10,14 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\InviteController;
 
 Route::middleware('guest')->group(function () {
+
+    Route::get('/accept-invitation/{token}', [InviteController::class, 'accept_invitation'])->name('accept_invitation');
+    Route::post('/invitation-registred', [InviteController::class, 'store_invitation'])->name('store_invitation');
+
+
     Route::get('register', [RegisteredUserController::class, 'create'])
                 ->name('register');
 

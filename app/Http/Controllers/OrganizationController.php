@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response;
 
 class OrganizationController extends Controller
 {
@@ -33,21 +34,27 @@ class OrganizationController extends Controller
             return $org;
         });
 
-        return response()->json([
-            'success' => true,
-            'data' => $organizations,
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data'    => $organizations,
+            ], Response::HTTP_OK);
+        }
+        return view('pages.controlpanel.organization.index', ['organizations' => $organizations]);
     }
 
     /**
-     * Show creation instructions (not used in API, but provided for completeness).
+     * Show creation instructions.
      */
-    public function create()
+    public function create(Request $request)
     {
-        return response()->json([
-            'success' => true,
-            'message' => 'Provide organization details to create a new organization.'
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Provide organization details to create a new organization.'
+            ], Response::HTTP_OK);
+        }
+        return view('organization.create');
     }
 
     /**
@@ -75,29 +82,36 @@ class OrganizationController extends Controller
             $orgData = [
                 'user_id'           => $user->id,
                 'organization_name' => $request->name,
-                // You may add additional fields like 'website', 'address', 'description' if provided.
+                // Additional fields like 'website', 'address', or 'description' can be added here.
             ];
 
             Organization::create($orgData);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Organization created successfully.',
-                'data'    => $user->load('organization')
-            ], 201);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Organization created successfully.',
+                    'data'    => $user->load('organization')
+                ], Response::HTTP_CREATED);
+            }
+            return redirect()->route('organization.index')
+                ->with('success', 'Organization created successfully.');
         } catch (\Exception $e) {
             Log::error("Organization creation failed: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create organization'
-            ], 500);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create organization'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to create organization');
         }
     }
 
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $org = User::join('organizations', 'users.id', '=', 'organizations.user_id')
             ->where('users.id', $id)
@@ -105,40 +119,51 @@ class OrganizationController extends Controller
             ->first();
 
         if (!$org) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Organization not found'
-            ], 404);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Organization not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('organization.index')->withErrors('Organization not found');
         }
 
-        return response()->json([
-            'success' => true,
-            'data'    => $org
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data'    => $org
+            ], Response::HTTP_OK);
+        }
+        return view('organization.show', ['organization' => $org]);
     }
 
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(string $id)
+    public function edit(Request $request, string $id)
     {
-        // In an API, edit usually returns the existing resource data.
         $org = User::join('organizations', 'users.id', '=', 'organizations.user_id')
             ->where('users.id', $id)
             ->select('users.email', 'organizations.*')
             ->first();
 
         if (!$org) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Organization not found'
-            ], 404);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Organization not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('organization.index')->withErrors('Organization not found');
         }
 
-        return response()->json([
-            'success' => true,
-            'data'    => $org
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data'    => $org
+            ], Response::HTTP_OK);
+        }
+        return view('organization.edit', ['organization' => $org]);
     }
 
     /**
@@ -172,35 +197,46 @@ class OrganizationController extends Controller
                 ->select('users.email', 'organizations.*')
                 ->first();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Organization updated successfully.',
-                'data'    => $org
-            ], 200);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Organization updated successfully.',
+                    'data'    => $org
+                ], Response::HTTP_OK);
+            }
+            return redirect()->route('organizations.show', $id)
+                ->with('success', 'Organization updated successfully.');
         } catch (\Exception $e) {
             Log::error("Organization update failed: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update organization'
-            ], 500);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update organization'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to update organization');
         }
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $user = User::find($id);
 
         if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Organization not found'
-            ], 404);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Organization not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('organization.index')->withErrors('Organization not found');
         }
 
         try {
+            // Delete associated organization, employees, jobs and their applications.
             Organization::where('user_id', $id)->delete();
             Employee::where('creator_id', $id)->delete();
             $jobs = Job::where('organization_id', $id)->get();
@@ -208,20 +244,26 @@ class OrganizationController extends Controller
             foreach ($jobs as $job) {
                 Application_form::where('job_id', $job->id)->delete();
             }
-
             $jobs->each->delete();
             $user->delete();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Organization deleted successfully.'
-            ], 200);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Organization deleted successfully.'
+                ], Response::HTTP_OK);
+            }
+            return redirect()->route('organizations.index')
+                ->with('success', 'Organization deleted successfully.');
         } catch (\Exception $e) {
             Log::error("Organization deletion failed: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete organization'
-            ], 500);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete organization'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to delete organization');
         }
     }
 }

@@ -37,15 +37,16 @@ Route::middleware(['api'])->group(function () {
             //invitation Controller Routes
             Route::get('/invite', [InviteController::class, 'create'])->name('invite_create');
             Route::post('/invite-sent', [InviteController::class, 'store'])->name('invite_sent');
-            Route::get('/accept-invitation/{token}', [InviteController::class, 'accept_invitation'])->name('accept_invitation');
-            Route::post('/invitation-registred', [InviteController::class, 'store_invitation'])->name('store_invitation');
+
+
+
             //permission Contoller Routes
             Route::resource('employee', EmployeeController::class);
             Route::put('/employee/update/{id}', [EmployeeController::class, 'update']);
             Route::get('user-select', [PermissionController::class, 'userSelect'])->name('user-select');
             Route::get('role-select', [PermissionController::class, 'roleSelect'])->name('role-select');
             Route::any('user-permission', [PermissionController::class, 'userPermission'])->name('user-permission');
-            Route::post('role-permission', [PermissionController::class, 'rolePermission'])->name('role-permission');
+            Route::any('role-permission', [PermissionController::class, 'rolePermission'])->name('role-permission');
             Route::PUT('user-permission-set/{id}', [PermissionController::class, 'userPermissionSet'])->name('user-permission-set');
             Route::PUT('role-permission-set/{id}', [PermissionController::class, 'rolePermissionSet'])->name('role-permission-set');
         });
@@ -74,6 +75,11 @@ Route::middleware(['api'])->group(function () {
         // Job Route Controller
         Route::middleware(['role:organization|employee|super-admin'])->group(function () {
             Route::resource('job', JobController::class);
+            // Route::get('data', JobController::class, 'getdata');
+            Route::get('data', [App\Http\Controllers\JobController::class, 'getdata'])->name('getdata');
+
+
+
         });
     });
 

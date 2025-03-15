@@ -12,7 +12,7 @@
       @endif
 
     </div>
-  
+
       <!-- Hoverable Table rows -->
       <div class="card">
         @if(session('success'))
@@ -34,7 +34,7 @@
             <tbody class="table-border-bottom-0">
              @foreach( $employees as $employee)
              @php
-             $user = $users->where('id', $employee->user_id)->first();
+              $user = $employee->user;
              @endphp
               <tr>
                 <td><i class="fab fa-angular fa-lg text-danger me-3"></i> <strong>{{$user->name}}</strong></td>
@@ -52,11 +52,11 @@
                     <div class="dropdown-menu">
                       <a class="dropdown-item" href="{{ route('employee.show', ['employee' => $employee->user_id]) }}"
                         ><i class="fas fa-file me-2"></i> View</a>
-                      
+
                       @if(!empty($creator))
                         <a class="dropdown-item" href="{{ route('org-employee-edit', ['emp_id' => $employee->user_id, 'id'=> $employee->creator_id]) }}"
                           ><i class="fas fa-edit me-2"></i> Edit</a>
-                            
+
                         <form method="POST" action="{{ route('org-employee-destroy', ['emp_id' => $employee->user_id, 'id'=> $employee->creator_id]) }}" class="delete-form">
                           @csrf
                           @method('DELETE')
@@ -67,7 +67,7 @@
                       @else
                         <a class="dropdown-item" href="{{ route('employee.edit', ['employee' => $employee->user_id]) }}"
                           ><i class="fas fa-edit me-2"></i> Edit</a>
-                            
+
                         <form method="POST" action="{{ route('employee.destroy', ['employee' => $employee->user_id]) }}" class="delete-form">
                           @csrf
                           @method('DELETE')

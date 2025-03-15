@@ -5,18 +5,21 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
+use App\Providers\RouteServiceProvider;
+use Symfony\Component\HttpFoundation\Response;
 
 class AuthenticatedSessionController extends Controller
 {
     /**
      * Handle regular user login (non-candidate).
      */
-    public function store(LoginRequest $request): JsonResponse
+    public function store(LoginRequest $request)
     {
         return $this->authenticateUser($request, ['candidate']);
     }
@@ -24,7 +27,7 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle candidate login.
      */
-    public function storeCandidate(LoginRequest $request): JsonResponse
+    public function storeCandidate(LoginRequest $request)
     {
         return $this->authenticateUser($request, [], ['candidate']);
     }
@@ -35,13 +38,12 @@ class AuthenticatedSessionController extends Controller
      * @param LoginRequest $request
      * @param array $deniedRoles Roles that are not allowed to login via this endpoint
      * @param array $allowedRoles If specified, only these roles can login
-     * @return JsonResponse
      */
     protected function authenticateUser(
         LoginRequest $request,
         array $deniedRoles = [],
         array $allowedRoles = []
-    ): JsonResponse {
+    ) {
         // Validate incoming credentials
         $credentials = $request->validated();
 
@@ -60,10 +62,13 @@ class AuthenticatedSessionController extends Controller
         foreach ($deniedRoles as $role) {
             if ($user->hasRole($role)) {
                 Log::info("Denied login for {$role} role: {$user->email}");
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You are not allowed to log in here',
-                ], 403);
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You are not allowed to log in here',
+                    ], 403);
+                }
+                return redirect()->back()->withErrors('You are not allowed to log in here');
             }
         }
 
@@ -76,13 +81,15 @@ class AuthenticatedSessionController extends Controller
                     break;
                 }
             }
-
             if (!$hasAllowedRole) {
                 Log::info("Unauthorized role access: {$user->email}");
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You are not authorized to access this route',
-                ], 403);
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You are not authorized to access this route',
+                    ], 403);
+                }
+                return redirect()->back()->withErrors('You are not authorized to access this route');
             }
         }
 
@@ -100,50 +107,87 @@ class AuthenticatedSessionController extends Controller
 
         Log::info("User logged in: {$user->email}");
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'user'  => $user->only(['id', 'name', 'email']),
-                'roles' => $roles, // roles included for frontend navigation/authorization
-                'token' => $token, // plain text token to be used in Authorization header
-            ],
-            'message' => 'Login successful',
-        ]);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'user'  => $user->only(['id', 'name', 'email']),
+                    'roles' => $roles,
+                    'token' => $token,
+                ],
+                'message' => 'Login successful',
+            ]);
+        } else {
+            // For non-JSON requests, log the user in using the session and redirect
+            auth()->login($user);
+            return redirect()->intended('/dashboard')->with('success', 'Login successful');
+        }
     }
 
-
+    /**
+     * Show the login view.
+     */
     public function create()
     {
-        // Return your login view here.
-        // If you are using Blade:
         return view('auth.login');
     }
 
     /**
      * Logout user by revoking the current access token.
      *
-     * This method is protected by the auth:sanctum middleware.
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * For API requests, this returns a JSON response.
+     * For web requests, it redirects to the login page.
      */
-    public function destroy(Request $request): JsonResponse
-    {
-        // Check if the request is authenticated
-        if (!$request->user()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthenticated',
-            ], 401);
-        }
+    // public function destroy(Request $request)
+    // {
+    //     if (!$request->user()) {
+    //         if ($request->expectsJson()) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'Unauthenticated',
+    //             ], 401);
+    //         }
+    //         return redirect()->route('login')->withErrors('Unauthenticated');
+    //     }
 
-        // Revoke the current token (so it can no longer be used)
-        $request->user()->currentAccessToken()->delete();
-        Log::info("User logged out: {$request->user()->email}");
+    //     // Check if the user has an active access token before deleting.
+    //     if ($token = $request->user()->currentAccessToken()) {
+    //         $token->delete();
+    //     }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Logout successful',
-        ]);
+    //     Log::info("User logged out: {$request->user()->email}");
+
+    //     if ($request->expectsJson()) {
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Logout successful',
+    //         ]);
+    //     }
+    //     return redirect()->route('login')->with('success', 'Logout successful');
+    // }
+
+
+public function destroy(Request $request)
+{
+    // Get the authenticated user (if any)
+    $user = Auth::user();
+
+    // Logout and clear session
+    Auth::guard('web')->logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    // Check if the request expects JSON (API request)
+    if ($request->expectsJson()) {
+        return response()->json(['message' => 'Logged out successfully.'], Response::HTTP_OK);
     }
+
+    // For normal web requests, redirect based on role
+    if ($user && $user->hasRole('candidate')) {
+        return redirect()->route('user-login');
+    } else {
+        return redirect()->intended(RouteServiceProvider::HOME);
+    }
+}
+
 }

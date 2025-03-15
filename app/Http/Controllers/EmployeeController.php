@@ -18,7 +18,7 @@ class EmployeeController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
             $creator = auth()->user();
@@ -28,16 +28,24 @@ class EmployeeController extends Controller
                 ->with('user')
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'data' => $employees
-            ], Response::HTTP_OK);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data'    => $employees
+                ], Response::HTTP_OK);
+            }
+
+            // Fallback: return a view for web users.
+            return view('employees.index', compact('employees'));
         } catch (\Exception $e) {
             Log::error("Error fetching employees: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve employees'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to retrieve employees'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to retrieve employees');
         }
     }
 
@@ -49,67 +57,83 @@ class EmployeeController extends Controller
         Log::info('Employee creation request', $request->all());
 
         $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'name'     => ['required', 'string', 'max:255'],
+            'email'    => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
         if ($validator->fails()) {
             Log::warning('Validation failed', $validator->errors()->toArray());
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'errors'  => $validator->errors()
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+            return redirect()->back()->withErrors($validator)->withInput();
         }
 
         try {
             $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
+                'name'     => $request->name,
+                'email'    => $request->email,
                 'password' => Hash::make($request->password),
             ])->assignRole('employee');
 
             Employee::create([
                 'creator_id' => auth()->id(),
-                'user_id' => $user->id
+                'user_id'    => $user->id
             ]);
 
             Log::info("Employee created successfully. User ID: {$user->id}");
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Employee created successfully.',
-                'data' => $user->load('employees')
-            ], Response::HTTP_CREATED);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Employee created successfully.',
+                    'data'    => $user->load('employees')
+                ], Response::HTTP_CREATED);
+            }
+            return redirect()->route('employees.index')
+                ->with('success', 'Employee created successfully.');
         } catch (\Exception $e) {
             Log::error("Employee creation failed: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create employee'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create employee'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to create employee');
         }
     }
 
     /**
      * Display the specified resource.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         try {
             $employee = Employee::with('user')
                 ->where('user_id', $id)
                 ->firstOrFail();
 
-            return response()->json([
-                'success' => true,
-                'data' => $employee
-            ], Response::HTTP_OK);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data'    => $employee
+                ], Response::HTTP_OK);
+            }
+            return view('employees.show', compact('employee'));
         } catch (\Exception $e) {
             Log::error("Employee not found: {$id} - " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Employee not found'
-            ], Response::HTTP_NOT_FOUND);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->back()->withErrors('Employee not found');
         }
     }
 
@@ -120,9 +144,6 @@ class EmployeeController extends Controller
     {
         Log::info("Update method called with ID: {$id}");
         Log::info('User details', $request->all());
-        Log::info('Name: ' . $request->input('name'));
-        Log::info('Email: ' . $request->input('email'));
-
 
         try {
             $user = User::findOrFail($id);
@@ -132,34 +153,35 @@ class EmployeeController extends Controller
             Log::info("Employee found for user ID: {$id}");
 
             $validator = Validator::make($request->all(), [
-                'name' => ['sometimes', 'string', 'max:255'],
-                'email' => ['sometimes', 'string', 'email', 'max:255', 'unique:users,email,' . $id],
-                'password' => ['sometimes', 'confirmed', Rules\Password::defaults()],
-                'phone_number' => ['nullable', 'string', 'max:255'],
-                'gender' => ['nullable', 'in:Male,Female,Other'],
-                'birth_date' => ['nullable', 'date'],
-                'address' => ['nullable', 'string', 'max:255'],
-                'zipcode' => ['nullable', 'string', 'max:10'],
-                'latest_degree' => ['nullable', 'string', 'max:255'],
-                'latest_university' => ['nullable', 'string', 'max:255'],
-                'current_organization' => ['nullable', 'string', 'max:255'],
+                'name'               => ['sometimes', 'string', 'max:255'],
+                'email'              => ['sometimes', 'string', 'email', 'max:255', 'unique:users,email,' . $id],
+                'password'           => ['sometimes', 'confirmed', Rules\Password::defaults()],
+                'phone_number'       => ['nullable', 'string', 'max:255'],
+                'gender'             => ['nullable', 'in:Male,Female,Other'],
+                'birth_date'         => ['nullable', 'date'],
+                'address'            => ['nullable', 'string', 'max:255'],
+                'zipcode'            => ['nullable', 'string', 'max:10'],
+                'latest_degree'      => ['nullable', 'string', 'max:255'],
+                'latest_university'  => ['nullable', 'string', 'max:255'],
+                'current_organization'=> ['nullable', 'string', 'max:255'],
                 'current_department' => ['nullable', 'string', 'max:255'],
-                'current_position' => ['nullable', 'string', 'max:255'],
-                'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:2048'],
+                'current_position'   => ['nullable', 'string', 'max:255'],
+                'avatar'             => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:2048'],
             ]);
 
             if ($validator->fails()) {
                 Log::warning('Update validation failed', $validator->errors()->toArray());
-                return response()->json([
-                    'success' => false,
-                    'errors' => $validator->errors()
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'errors'  => $validator->errors()
+                    ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                }
+                return redirect()->back()->withErrors($validator)->withInput();
             }
 
-            $user->update($request->only([
-                'name',
-                'email'
-            ]));
+            // Update basic user fields
+            $user->update($request->only(['name', 'email']));
             Log::info("User updated: {$id}");
 
             if ($request->has('password')) {
@@ -168,9 +190,10 @@ class EmployeeController extends Controller
                 Log::info("Password updated for user ID: {$id}");
             }
 
+            // Update employee-specific fields (excluding name, email, password)
             $employee->update($request->except(['name', 'email', 'password']));
 
-
+            // Handle avatar upload if provided
             if ($request->hasFile('avatar')) {
                 $avatarPath = $request->file('avatar')->store('avatars', 'public');
                 $employee->picture = $avatarPath;
@@ -180,26 +203,31 @@ class EmployeeController extends Controller
 
             Log::info("Employee updated successfully. User ID: {$id}");
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Employee updated successfully.',
-                'data' => $user->load('employees')
-            ], Response::HTTP_OK);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Employee updated successfully.',
+                    'data'    => $user->load('employees')
+                ], Response::HTTP_OK);
+            }
+            return redirect()->route('employees.show', $id)
+                ->with('success', 'Employee updated successfully.');
         } catch (\Exception $e) {
             Log::error("Update failed for ID {$id}: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update employee'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update employee'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to update employee');
         }
     }
-
 
     /**
      * Remove the specified resource from storage.
      */
-
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
             $user = User::findOrFail($id);
@@ -207,23 +235,30 @@ class EmployeeController extends Controller
             $user->deleteWithRolesAndPermissions();
 
             Log::info("Employee deleted successfully. User ID: {$id}");
-            return response()->json([
-                'success' => true,
-                'message' => 'Employee deleted successfully.'
-            ], Response::HTTP_OK);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Employee deleted successfully.'
+                ], Response::HTTP_OK);
+            }
+            return redirect()->route('employees.index')
+                ->with('success', 'Employee deleted successfully.');
         } catch (\Exception $e) {
             Log::error("Delete failed for ID {$id}: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete employee'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete employee'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to delete employee');
         }
     }
 
     /**
-     * Admin-specific endpoints
+     * Admin-specific endpoint: Display a listing of employees for a given creator.
      */
-    public function adminIndex($creatorId)
+    public function adminIndex(Request $request, $creatorId)
     {
         try {
             Log::info("Admin fetching employees for creator ID: {$creatorId}");
@@ -232,16 +267,23 @@ class EmployeeController extends Controller
                 ->with('user')
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'data' => $employees
-            ], Response::HTTP_OK);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data'    => $employees
+                ], Response::HTTP_OK);
+            }
+
+            return view('pages.controlpanel.employee.index', compact('employees'));
         } catch (\Exception $e) {
             Log::error("Admin employee fetch failed: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve employees'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to retrieve employees'
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+            return redirect()->back()->withErrors('Failed to retrieve employees');
         }
     }
 }

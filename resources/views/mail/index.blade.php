@@ -60,7 +60,7 @@
             <h2>Hello, this is the email from CRM Project!</h2>
             <p>We are inviting you join us as company employee.</p>
             <p>Click the link below and get registred</p>
-            <a href="https://765d-103-82-121-241.ngrok-free.app/accept-invitation/{{$token}}" class="button">Register</a>
+            <a href="http://localhost:3000/demos/admin-templates/datta-able/react/freeb /accept-invitation/{{$token}}" class="button">Register</a>
         </div>
     </div>
 </body>

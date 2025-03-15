@@ -4,32 +4,38 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Categories;
+use Symfony\Component\HttpFoundation\Response;
 
 class CategoriesController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
         $cats = Categories::all();
 
-        return response()->json([
-            'success' => true,
-            'data'    => $cats,
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data'    => $cats,
+            ], Response::HTTP_OK);
+        }
+        return view('pages.controlpanel.categories.index', compact('cats'));
     }
 
     /**
      * Show the form for creating a new resource.
-     * (In an API, this can return instructions or simply be omitted.)
      */
-    public function create()
+    public function create(Request $request)
     {
-        return response()->json([
-            'success' => true,
-            'message' => 'Send a POST request with "cat_name" to create a new category.'
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Send a POST request with "cat_name" to create a new category.'
+            ], Response::HTTP_OK);
+        }
+        return view('categories.create');
     }
 
     /**
@@ -43,52 +49,67 @@ class CategoriesController extends Controller
 
         $category = Categories::create($validated);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Category created successfully.',
-            'data'    => $category
-        ], 201);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Category created successfully.',
+                'data'    => $category
+            ], Response::HTTP_CREATED);
+        }
+        return redirect()->route('categories.index')
+            ->with('success', 'Category created successfully.');
     }
 
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $category = Categories::find($id);
 
         if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Category not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('categories.index')->withErrors('Category not found');
         }
 
-        return response()->json([
-            'success' => true,
-            'data'    => $category
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data'    => $category
+            ], Response::HTTP_OK);
+        }
+        return view('pages.controlpanel.categories.show', compact('category'));
     }
 
     /**
      * Show the form for editing the specified resource.
-     * (In an API, this typically returns the resource data to edit.)
      */
-    public function edit(string $id)
+    public function edit(Request $request, string $id)
     {
-        $category = Categories::find($id);
+        $cat = Categories::find($id);
 
-        if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
+        if (!$cat) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Category not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('categories.index')->withErrors('Category not found');
         }
 
-        return response()->json([
-            'success' => true,
-            'data'    => $category
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'data'    => $cat
+            ], Response::HTTP_OK);
+        }
+        return view('pages.controlpanel.categories.edit', compact('cat'));
     }
 
     /**
@@ -103,40 +124,54 @@ class CategoriesController extends Controller
         $category = Categories::find($id);
 
         if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Category not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('categories.index')->withErrors('Category not found');
         }
 
         $category->update($validated);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Category updated successfully.',
-            'data'    => $category
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Category updated successfully.',
+                'data'    => $category
+            ], Response::HTTP_OK);
+        }
+        return redirect()->route('categories.index')
+            ->with('success', 'Category updated successfully.');
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $category = Categories::find($id);
 
         if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Category not found'
+                ], Response::HTTP_NOT_FOUND);
+            }
+            return redirect()->route('categories.index')->withErrors('Category not found');
         }
 
         $category->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Category deleted successfully.'
-        ], 200);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Category deleted successfully.'
+            ], Response::HTTP_OK);
+        }
+        return redirect()->route('categories.index')
+            ->with('success', 'Category deleted successfully.');
     }
 }
