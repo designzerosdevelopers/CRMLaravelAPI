@@ -27,7 +27,6 @@ Route::middleware(['api'])->group(function () {
     Route::middleware(['auth:sanctum', 'ensureToken'])->group(function () {
 
 
-
         Route::middleware(['role:organization|super-admin'])->group(function () {
             //Candidate view and selection routes
             Route::get('/applier_candidates/{id}', [ApplicationController::class, 'index'])->name('applier_candidates');
@@ -88,7 +87,9 @@ Route::middleware(['api'])->group(function () {
     //     return view('pages.controlpanel.dashboard');
     // })->middleware(['auth', 'verified'])->name('dashboard');
 
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth:sanctum', 'ensureToken'])->group(function () {
+
+        Route::post('/profile/upload', [ProfileController::class, 'upload'])->name('profile.upload');
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

@@ -5,10 +5,11 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Collection;
 use App\Models\Degree;
 use App\Models\Job;
+use App\Models\Organization;
 use App\Models\Application_form;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-
+use Illuminate\Support\Facades\Log;
 class ApplicationController extends Controller
 {
     /**
@@ -16,7 +17,13 @@ class ApplicationController extends Controller
      */
     public function index(Request $request, $id)
     {
+        Log::info('Received job ID', ['id' => $id]);
+
         $job = Job::find($id);
+        $applied = Application_form::where('job_id', $id)->first();
+
+        Log::info('Job details', ['job' => $job]);
+        Log::info('First application for job', ['application' => $applied]);
 
         if (!$job) {
             if ($request->expectsJson()) {
@@ -28,6 +35,7 @@ class ApplicationController extends Controller
             return redirect()->back()->withErrors('Job not found');
         }
 
+        // Retrieve applications with registered users
         $applications1 = Application_form::join('candidates', 'application_form.user_id', '=', 'candidates.user_id')
             ->join('users', 'candidates.user_id', '=', 'users.id')
             ->where('application_form.job_id', $id)
@@ -42,6 +50,9 @@ class ApplicationController extends Controller
             )
             ->get();
 
+        Log::info('Applications for job (registered users)', ['applications' => $applications1]);
+
+        // Calculate match score for each application
         foreach ($applications1 as $application) {
             $skillScore      = $this->stringmatch($job->skill, $application->skill);
             $educationScore  = ($application->degree_id == $job->degree_id) ? 3 : 0;
@@ -49,10 +60,16 @@ class ApplicationController extends Controller
             $application->match_score = number_format($skillScore + $educationScore + $experienceScore, 2);
         }
 
+        // Sort applications by match score
         $sortedApplications = $applications1->sortByDesc('match_score');
 
-        // Retrieve applications with no registered user
-        $applications2 = Application_form::whereNull('user_id')->get();
+        // Retrieve applications with no registered user (guest applications)
+        $applications2 = Application_form::whereNull('user_id')
+            ->where('job_id', $id)
+            ->select('application_form.*') // Add additional fields if stored in application_form (e.g., name, email)
+            ->get();
+
+        // Merge both collections
         $mergedApplications = $sortedApplications->concat($applications2);
 
         if ($request->expectsJson()) {
@@ -61,8 +78,45 @@ class ApplicationController extends Controller
                 'data'    => $mergedApplications
             ], Response::HTTP_OK);
         }
+
         return view('pages.controlpanel.candidate.index', ['applications' => $mergedApplications]);
     }
+
+
+
+
+    public function indexForAdmin(Request $request, $id)
+{
+    // Get the organization by its user id
+    $org = Organization::where('user_id', $id)->first();
+
+    // Get jobs for the organization including the two counts
+    $jobs = Job::where('organization_id', $org->user_id)
+        ->withCount([
+            // Count registered applications with join conditions
+            'application_form as registered_count' => function ($query) {
+                $query->join('candidates', 'application_form.user_id', '=', 'candidates.user_id')
+                      ->join('users', 'candidates.user_id', '=', 'users.id');
+            },
+            // Count unregistered applications
+            'application_form as unregistered_count' => function ($query) {
+                $query->whereNull('user_id');
+            }
+        ])
+        ->get();
+
+    if ($request->expectsJson()) {
+        return response()->json([
+            'jobs'    => $jobs,
+            'creator' => $id
+        ], Response::HTTP_OK);
+    }
+
+    return view('pages.controlpanel.job.index', [
+        'jobs'    => $jobs,
+        'creator' => $id
+    ]);
+}
 
     /**
      * Show the form for creating a new resource.
@@ -83,7 +137,7 @@ class ApplicationController extends Controller
             ->where('application_form.id', $form_id)
             ->select(
                 'application_form.*',
-                'candidates.resume',
+                'candidates.cv',
                 'candidates.phone_number',
                 'candidates.gender',
                 'candidates.birth_date',

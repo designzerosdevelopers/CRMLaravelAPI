@@ -36,7 +36,7 @@ class EmployeeController extends Controller
             }
 
             // Fallback: return a view for web users.
-            return view('employees.index', compact('employees'));
+            return view('pages.controlpanel.employee.index', compact('employees'));
         } catch (\Exception $e) {
             Log::error("Error fetching employees: " . $e->getMessage());
             if ($request->expectsJson()) {

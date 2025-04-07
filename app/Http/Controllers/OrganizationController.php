@@ -134,7 +134,7 @@ class OrganizationController extends Controller
                 'data'    => $org
             ], Response::HTTP_OK);
         }
-        return view('organization.show', ['organization' => $org]);
+        return view('pages.controlpanel.organization.show', ['org' => $org]);
     }
 
     /**
@@ -223,7 +223,9 @@ class OrganizationController extends Controller
      */
     public function destroy(Request $request, string $id)
     {
+        Log::info("ERACHED TO DELETE ID IS ",$request->all() );
         $user = User::find($id);
+        Log::info("ORG FOUND", ['USER' => $user]);
 
         if (!$user) {
             if ($request->expectsJson()) {
@@ -253,7 +255,7 @@ class OrganizationController extends Controller
                     'message' => 'Organization deleted successfully.'
                 ], Response::HTTP_OK);
             }
-            return redirect()->route('organizations.index')
+            return redirect()->route('organization.index')
                 ->with('success', 'Organization deleted successfully.');
         } catch (\Exception $e) {
             Log::error("Organization deletion failed: " . $e->getMessage());

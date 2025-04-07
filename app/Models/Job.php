@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Job extends Model
 {
     use HasFactory, SoftDeletes;
-    
+
     protected $fillable = [
         'user_id',
         'organization_id',
@@ -36,7 +36,7 @@ class Job extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
-    
+
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'organization_id');
@@ -60,6 +60,12 @@ public function categories()
 public function degree()
 {
     return $this->belongsTo(Degree::class, 'degree_id');
+}
+
+public function getTotalCountAttribute()
+{
+    // Ensure the attributes exist before adding them
+    return ($this->registered_count ?? 0) + ($this->unregistered_count ?? 0);
 }
 
 }

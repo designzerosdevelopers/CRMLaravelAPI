@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use App\Providers\RouteServiceProvider;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -24,10 +25,17 @@ class AuthenticatedSessionController extends Controller
         return $this->authenticateUser($request, ['candidate']);
     }
 
+
+    public function create_candidate(): View
+    {
+        return view('auth.candidate.login');
+    }
+
+
     /**
      * Handle candidate login.
      */
-    public function storeCandidate(LoginRequest $request)
+    public function store_candidate(LoginRequest $request)
     {
         return $this->authenticateUser($request, [], ['candidate']);
     }

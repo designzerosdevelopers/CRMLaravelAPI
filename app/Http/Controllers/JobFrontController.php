@@ -147,6 +147,8 @@ class JobFrontController extends Controller
             return redirect()->back()->with('error', $errorMessage);
         }
 
+        $user = auth()->user();
+
         if (!$request->input('use_old_cv')) {
             $cvFile = $request->file('cv');
             $destinationPath = public_path('cv');
@@ -155,8 +157,12 @@ class JobFrontController extends Controller
             $pathname = $destinationPath . DIRECTORY_SEPARATOR . $destinationFileName;
 
             PdfLabeler::dispatch($pathname);
-            // Create a candidate record for guest if needed
-            Candidate::create(['cv' => $pathname]);
+
+            $candidateData = ['cv' => $pathname];
+            if ($user) {
+                $candidateData['user_id'] = $user->id;
+            }
+            Candidate::create($candidateData);
         } else {
             $pathname = $request->input('use_old_cv');
         }

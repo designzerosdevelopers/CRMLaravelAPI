@@ -85,9 +85,11 @@
                         <!-- /Logo -->
                         <h4 class="mb-2">Work starts here 🚀</h4>
                         <p class="mb-4">You can register as user</p>
-          
+
                         <form method="POST" action="{{ route('register') }}" enctype="multipart/form-data">
                             @csrf
+                            <input type="hidden" name="is_candidate" value="1">
+
                           <div class="mb-3">
                             <label for="username" class="form-label">{{ __('Name')}}</label>
                             <input
@@ -147,7 +149,7 @@
                               <span class="input-group-text cursor-pointer"><i class="bx bx-hide"></i></span>
                             </div>
                           </div>
-          
+
                           <div class="mb-3">
                             <div class="form-check">
                               <input class="form-check-input" type="checkbox" id="terms-conditions" name="terms" />
@@ -161,7 +163,7 @@
                             <button class="btn btn-primary d-grid w-100" name="candidate" type="submit">{{ __('Sign up') }}</button>
                         </div>
                         </form>
-          
+
                         <p class="text-center">
                           <span>Already have an account?</span>
                           <a href="{{route('user-login')}}">
@@ -174,12 +176,11 @@
                   </div>
                 </div>
               </div>
-          
+
               <!-- / Content -->
-  
+
       <!-- Core JS -->
       @include('includes.controlpanel.scripts')
     </body>
 </html>
-  
-  
+

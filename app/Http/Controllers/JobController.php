@@ -7,6 +7,7 @@ use App\Models\Degree;
 use App\Models\Employee;
 use App\Models\Categories;
 use App\Models\Organization;
+use App\Models\Application_form;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,11 +30,11 @@ class JobController extends Controller
                 ->withCount('application_form')
                 ->get();
         } else {
-            $jobs = collect(); // Fallback if no role match
+            $jobs = collect();
         }
 
         if ($request->expectsJson()) {
-            return response()->json(['response' => $jobs], Response::HTTP_OK);
+            return response()->json(['jobs' => $jobs], Response::HTTP_OK);
         }
         return view('pages.controlpanel.job.index', ['jobs' => $jobs]);
     }
@@ -78,11 +79,66 @@ class JobController extends Controller
             ->withCount('application_form')
             ->get();
 
+
+            $count1 = Application_form::join('candidates', 'application_form.user_id', '=', 'candidates.user_id')
+            ->join('users', 'candidates.user_id', '=', 'users.id')
+            ->where('application_form.job_id', $id)
+            ->count();
+
+        $count2 = Application_form::whereNull('user_id')->count();
+
+        $totalCount = $count1 + $count2;
+
+
         if ($request->expectsJson()) {
-            return response()->json(['response' => $jobs, 'creator' => $id], Response::HTTP_OK);
+            return response()->json(['jobs' => $jobs, 'creator' => $id], Response::HTTP_OK);
         }
         return view('pages.controlpanel.job.index', ['jobs' => $jobs, 'creator' => $id]);
     }
+
+
+    // public function indexForAdmin(Request $request, $id)
+    // {
+    //     // Get the organization by its user id
+    //     $org = Organization::where('user_id', $id)->first();
+
+    //     // Get jobs for the organization and include counts for two types of applications:
+    //     // 1. Registered applications (joined with candidates and users)
+    //     // 2. Unregistered applications (where user_id is null)
+    //     $jobs = Job::where('organization_id', $org->user_id)
+    //         ->withCount([
+    //             // Count registered applications with join conditions
+    //             'application_form as registered_count' => function ($query) {
+    //                 $query->join('candidates', 'application_form.user_id', '=', 'candidates.user_id')
+    //                       ->join('users', 'candidates.user_id', '=', 'users.id');
+    //             },
+    //             // Count unregistered applications
+    //             'application_form as unregistered_count' => function ($query) {
+    //                 $query->whereNull('user_id');
+    //             }
+    //         ])
+    //         ->get();
+
+    //     // Optionally, if you want a total count field on each job,
+    //     // you can loop through the jobs and add it:
+    //     foreach ($jobs as $job) {
+    //         $job->total_count = $job->registered_count + $job->unregistered_count;
+    //     }
+
+    //     if ($request->expectsJson()) {
+    //         return response()->json([
+    //             'jobs'    => $jobs,
+    //             'creator' => $id
+    //         ], Response::HTTP_OK);
+    //     }
+
+    //     return view('pages.controlpanel.job.index', [
+    //         'jobs'    => $jobs,
+    //         'creator' => $id
+    //     ]);
+    // }
+
+
 
     /**
      * Show the form for creating a new resource.

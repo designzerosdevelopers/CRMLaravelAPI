@@ -13,6 +13,13 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\TokenController;
 use App\Models\Candidate;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+
+
+
+Route::get('/react', function () {
+    return view('react');
+})->where('any', '.*');
+
 Route::get('/', function () {
     return view('pages.guest.index');
 });
